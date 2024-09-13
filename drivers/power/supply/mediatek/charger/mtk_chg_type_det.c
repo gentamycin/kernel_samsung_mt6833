@@ -429,7 +429,7 @@ static void plug_in_out_handler(struct chg_type_info *cti, bool en, bool ignore)
 skip:
 	mutex_unlock(&cti->chgdet_lock);
 }
-
+extern int kpd_pwk_event(int pressed);
 static int pd_tcp_notifier_call(struct notifier_block *pnb,
 				unsigned long event, void *data)
 {

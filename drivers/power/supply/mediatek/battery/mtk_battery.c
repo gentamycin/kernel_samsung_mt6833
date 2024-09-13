@@ -593,6 +593,114 @@ struct battery_data battery_main = {
 	.BAT_batt_temp = 0,
 };
 
+static int otg_state = 1;
+#if defined(CONFIG_W2_CHARGER_PRIVATE)
+static int otg_type = 0;
+#endif
+static int otg_get_property(struct power_supply *psy,
+	enum power_supply_property psp,
+	union power_supply_propval *val)
+{
+	int ret = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+			val->intval = 1;
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		if(otg_state)
+			val->intval = 1;
+		else
+			val->intval = 0;
+		break;
+#if defined(CONFIG_W2_CHARGER_PRIVATE)
+	case POWER_SUPPLY_PROP_TYPE:
+		pr_err("%s: otg_type=%d \n",__func__, otg_type);
+		val->intval = otg_type;
+		break;
+#endif
+	default:
+		pr_err("%sdefault:\n",__func__);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+//+bug672289,lvyuanchuan.wt,add,20210629,Increase file node control OTG
+static int otg_set_property(struct power_supply *psy,
+	enum power_supply_property psp,
+	const union power_supply_propval *val)
+{
+	int ret = 0;
+	struct power_supply *bat_psy = power_supply_get_by_name("battery");
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		pr_info("%s: OTG %s \n",__func__,val->intval > 0 ? "ON" : "OFF");
+#ifdef CONFIG_MTK_CHARGER
+#if CONFIG_MTK_GAUGE_VERSION == 30
+		if (!primary_charger) {
+			primary_charger = get_charger_by_name("primary_chg");
+			if (!primary_charger) {
+				pr_err("[%s]get primary charger device failed\n",__func__);
+				return ret;
+			}
+		}
+		if(val->intval) {//otg on
+			charger_dev_enable_otg(primary_charger, val->intval);
+			otg_state = 1;
+			pr_err("[%s] on val = %d\n",__func__,val->intval);
+		} else { //off otg
+			charger_dev_enable_otg(primary_charger, val->intval);
+			otg_state = 0;
+			pr_err("[%s]off val = %d\n",__func__,val->intval);
+		}
+#endif
+#endif
+		battery_main.BAT_STATUS =  val->intval > 0 ? POWER_SUPPLY_STATUS_NOT_CHARGING : POWER_SUPPLY_STATUS_CHARGING;
+		if(!IS_ERR_OR_NULL(bat_psy)) {
+			power_supply_changed(bat_psy);
+		}
+		break;
+#if defined(CONFIG_W2_CHARGER_PRIVATE)
+	case POWER_SUPPLY_PROP_TYPE:
+		otg_type = val->intval;
+		pr_err("%s: otg_type=%d \n",__func__, otg_type);
+		break;
+#endif
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+static int otg_props_is_writeable(struct power_supply *psy,
+		enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		return 1;
+	default:
+		break;
+	}
+
+	return 0;
+}
+//-bug672289,lvyuanchuan.wt,add,20210629,Increase file node control OTG
+struct battery_data otg_main = {
+	.psd = {
+		.name = "otg",
+		.type = POWER_SUPPLY_TYPE_OTG,
+		.properties = otg_props,
+		.num_properties = ARRAY_SIZE(otg_props),
+		.get_property = otg_get_property,
+		.set_property = otg_set_property,
+		.property_is_writeable = otg_props_is_writeable,
+	},
+};
+
 void evb_battery_init(void)
 {
 	battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_FULL;
